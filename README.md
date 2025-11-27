@@ -29,6 +29,13 @@
 <img width="2560" height="1440" alt="cb3e3f5ab8c8dd52b808fdb1b096285c" src="https://github.com/user-attachments/assets/76ae7636-2367-440b-b6b2-d4f92725e9af" />
 
 ---
+## 🙌 致敬与灵感
+**本项目的灵感直接来源于大佬的项目：[manosaba_text_box (魔法少女的魔女裁判 文本框生成器)](https://github.com/oplivilqo/manosaba_text_box)**
+
+*   **关于原项目**：`manosaba_text_box` 的功能已经很完善了，这里也推荐大家去玩魔裁，确实是很好的GalGame，记得给manosaba_text_box点个Star谢谢喵~
+*   **关于本项目**：在惊叹于原项目创意的同时，我萌生了一个想法——**“如果能把这个功能做成通用的，让大家能把任何自己喜欢的老婆/女儿放进对话框里，岂不是更快乐？”**
+    *   于是便有了这个通用的版本。
+    *   希望能作为一种补充，为大家提供更多自定义的乐趣。
 
 ## 📦 安装与使用
 
