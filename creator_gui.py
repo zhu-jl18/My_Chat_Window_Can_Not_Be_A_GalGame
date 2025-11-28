@@ -3,20 +3,22 @@ import os
 import json
 import shutil
 import re
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QMessageBox, QGraphicsView, QGraphicsScene,
     QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsItem, QCheckBox,
     QSpinBox, QComboBox, QInputDialog, QFileDialog, QLineEdit, QDialog,
-    QDockWidget, QListWidget, QListWidgetItem, QFormLayout, QColorDialog,
-    QMenu, QToolBar, QSplitter, QFrame, QGroupBox, QScrollArea, QDialogButtonBox
+    QDockWidget, QListWidget, QFormLayout, QColorDialog,
+    QMenu, QGroupBox, QScrollArea, QDialogButtonBox,
+    QGraphicsSceneMouseEvent, QGraphicsSceneHoverEvent, QGraphicsSceneWheelEvent
 )
-from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QSize, QPointF, QPoint
+from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF
 from PyQt6.QtGui import (
-    QPixmap, QColor, QPen, QBrush, QFont, QImage, QAction, 
-    QPainter, QIcon, QDragEnterEvent, QDropEvent, QFontDatabase, QCursor
+    QPixmap, QColor, QPen, QBrush, QFont, QAction, 
+    QPainter, QDragEnterEvent, QDropEvent, QFontDatabase,
+    QContextMenuEvent
 )
 
 # 尝试导入后端模块
@@ -26,8 +28,9 @@ try:
     from core.prebuild import prebuild_character
 except ImportError:
     print("Warning: Core modules not found. Some features may not work.")
-    def load_global_config(): return {}
-    def save_global_config(cfg): pass
+    
+    def load_global_config() -> Dict[str, Any]: return {}
+    def save_global_config(config: Dict[str, Any]): pass
     CharacterRenderer = None
     prebuild_character = None
 
@@ -83,25 +86,28 @@ class ResizableTextItem(QGraphicsRectItem):
         self._start_mouse_pos = QPointF()
         self._start_rect = QRectF()
 
-    def update_content(self, text: str = None, color: List[int] = None, size: int = None):
+    def update_content(self, text: str|None = None, color: List[int]|None = None, size: int|None = None):
         if text is not None: self.preview_text = text
         if color is not None: self.text_color = QColor(*color)
         if size is not None: self.font_size = size
         self.update()
 
-    def hoverMoveEvent(self, event):
-        if self.isSelected():
+    def hoverMoveEvent(self, event: Optional[QGraphicsSceneHoverEvent]):
+        if self.isSelected() and event:
             direction = self._hit_test(event.pos())
             self._update_cursor(direction)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
         super().hoverMoveEvent(event)
 
-    def hoverLeaveEvent(self, event):
+    def hoverLeaveEvent(self, event: Optional[QGraphicsSceneHoverEvent]):
         self.setCursor(Qt.CursorShape.ArrowCursor)
         super().hoverLeaveEvent(event)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: Optional[QGraphicsSceneMouseEvent]):
+        if not event:
+            super().mousePressEvent(event)
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             pos = event.pos()
             direction = self._hit_test(pos)
@@ -119,7 +125,10 @@ class ResizableTextItem(QGraphicsRectItem):
         else:
             super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent | None):
+        if not event:
+            super().mouseMoveEvent(event)
+            return
         if self._state == self.STATE_RESIZE:
             delta = event.scenePos() - self._start_mouse_pos
             new_rect = QRectF(self._start_rect)
@@ -138,7 +147,10 @@ class ResizableTextItem(QGraphicsRectItem):
         else:
             super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent | None):
+        if not event:
+            super().mouseReleaseEvent(event)
+            return
         self._state = self.STATE_IDLE
         self._resize_dir = self.DIR_NONE
         self._update_cursor(self._hit_test(event.pos()))
@@ -161,7 +173,7 @@ class ResizableTextItem(QGraphicsRectItem):
         
         return result
 
-    def _update_cursor(self, direction):
+    def _update_cursor(self, direction: int):
         if direction == self.DIR_TOP_LEFT or direction == self.DIR_BOTTOM_RIGHT:
             self.setCursor(Qt.CursorShape.SizeFDiagCursor)
         elif direction == self.DIR_TOP_RIGHT or direction == self.DIR_BOTTOM_LEFT:
@@ -173,7 +185,11 @@ class ResizableTextItem(QGraphicsRectItem):
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def paint(self, painter: QPainter, option, widget=None) -> None:
+    def paint(self, painter: Optional[QPainter], option=None, widget=None) -> None:
+        # Guard against None painter as the base signature allows Optional[QPainter]
+        if painter is None:
+            return
+
         pen_color = QColor(0, 120, 215) if self.isSelected() else QColor(150, 150, 150, 100)
         width = 2 if self.isSelected() else 1
         painter.setPen(QPen(pen_color, width, Qt.PenStyle.DashLine))
@@ -202,7 +218,10 @@ class ScalableImageItem(QGraphicsPixmapItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
 
-    def wheelEvent(self, event) -> None:
+    def wheelEvent(self, event: QGraphicsSceneWheelEvent | None) -> None:
+        if not event:
+            super().wheelEvent(event)
+            return
         if self.isSelected():
             factor = 1.05 if event.delta() > 0 else 0.95
             self.setScale(max(0.1, min(self.scale() * factor, 5.0)))
@@ -254,31 +273,35 @@ class AssetListWidget(QListWidget):
         self.setAcceptDrops(True)
         self.setDragDropMode(QListWidget.DragDropMode.DropOnly)
 
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            event.accept()
-        else:
-            event.ignore()
+    def dragEnterEvent(self, e: QDragEnterEvent): # pyright: ignore[reportIncompatibleMethodOverride]
+        mime = e.mimeData()
+        if e and mime:
+            if mime.hasUrls():
+                e.accept()
 
-    def dropEvent(self, event: QDropEvent):
-        for url in event.mimeData().urls():
-            path = url.toLocalFile()
-            if path.lower().endswith(('.png', '.jpg', '.jpeg')):
-                self.fileDropped.emit(path)
-
-    def contextMenuEvent(self, event):
-        item = self.itemAt(event.pos())
+        e.ignore()
+            
+    def dropEvent(self, e: QDropEvent): # pyright: ignore[reportIncompatibleMethodOverride]
+        mime = e.mimeData()
+        if mime and mime.hasUrls():
+            for url in mime.urls():
+                path = url.toLocalFile()
+                if path.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    self.fileDropped.emit(path)
+                    
+    def contextMenuEvent(self, e: QContextMenuEvent): # pyright: ignore[reportIncompatibleMethodOverride]
+        item = self.itemAt(e.pos())
         if item:
             menu = QMenu(self)
             delete_action = QAction("删除此文件", self)
             delete_action.triggered.connect(lambda: self.deleteRequested.emit(item.text()))
             menu.addAction(delete_action)
-            menu.exec(event.globalPos())
+            menu.exec(e.globalPos())
 
 
 class NewCharacterDialog(QDialog):
     """新建角色弹窗"""
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle("新建角色")
         self.resize(400, 200)
@@ -302,7 +325,7 @@ class NewCharacterDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def _auto_fill_name(self, text):
+    def _auto_fill_name(self, text: str):
         if not self.edit_name.text():
             self.edit_name.setText(text)
 
@@ -325,7 +348,7 @@ class MainWindow(QMainWindow):
         self.config: Dict[str, Any] = {}
         self.config_path: str = ""
         
-        self.scene_items = {
+        self.scene_items : Dict[str, Optional[ResizableTextItem|ScalableImageItem]] = {
             "bg": None,
             "portrait": None,
             "box": None,
@@ -374,8 +397,13 @@ class MainWindow(QMainWindow):
     def _create_menus(self):
         menubar = self.menuBar()
         
+        if menubar is None:
+            raise RuntimeError("Menu bar is not available")
+        
         # --- 文件菜单 ---
         file_menu = menubar.addMenu("文件 (&File)")
+        if file_menu is None:
+            raise RuntimeError("File menu is not available")
         
         action_new = QAction("新建角色 (New Character)", self)
         action_new.setShortcut("Ctrl+N")
@@ -398,6 +426,8 @@ class MainWindow(QMainWindow):
 
         # --- 工具菜单 ---
         tools_menu = menubar.addMenu("工具 (&Tools)")
+        if tools_menu is None:
+            raise RuntimeError("Tools menu is not available")
         
         action_preview = QAction("渲染预览 (Render Preview)", self)
         action_preview.setShortcut("F5")
@@ -728,7 +758,9 @@ class MainWindow(QMainWindow):
         self.scene_items = {k: None for k in self.scene_items}
         self.scene.clear()
         
-        self.scene.addRect(0, 0, CANVAS_W, CANVAS_H, QPen(Qt.GlobalColor.black), QBrush(Qt.GlobalColor.white)).setZValue(Z_BG)
+        qGraphicsRectItem= self.scene.addRect(0, 0, CANVAS_W, CANVAS_H, QPen(Qt.GlobalColor.black), QBrush(Qt.GlobalColor.white))
+        if qGraphicsRectItem:
+            qGraphicsRectItem.setZValue(Z_BG)
         
         layout = self.config.get("layout", {})
         assets = self.config.get("assets", {})
@@ -738,7 +770,7 @@ class MainWindow(QMainWindow):
             bg_path = self._find_asset_path(bg_name, "background")
             if bg_path:
                 pix = QPixmap(bg_path).scaled(CANVAS_W, CANVAS_H, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                item = QGraphicsPixmapItem(pix)
+                item = ScalableImageItem(pix)
                 item.setZValue(Z_BG)
                 self.scene.addItem(item)
                 self.scene_items["bg"] = item
@@ -751,7 +783,7 @@ class MainWindow(QMainWindow):
                 new_h = int(pix.height() * (CANVAS_W / pix.width()))
                 pix = pix.scaled(CANVAS_W, new_h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
             
-            item = QGraphicsPixmapItem(pix)
+            item = ScalableImageItem(pix)
             saved_pos = layout.get("box_pos")
             if saved_pos:
                 item.setPos(saved_pos[0], saved_pos[1])
@@ -821,7 +853,7 @@ class MainWindow(QMainWindow):
 
         self.fit_view()
 
-    def _find_asset_path(self, filename, type_folder):
+    def _find_asset_path(self, filename: str, type_folder: str) -> str | None:
         p1 = os.path.join(self.char_root, type_folder, filename)
         if os.path.exists(p1): return p1
         p2 = os.path.join(BASE_PATH, "common", type_folder, filename)
@@ -833,19 +865,19 @@ class MainWindow(QMainWindow):
         self.view.fitInView(0, 0, CANVAS_W, CANVAS_H, Qt.AspectRatioMode.KeepAspectRatio)
         self.view.scale(0.95, 0.95)
 
-    def on_portrait_selected(self, text):
+    def on_portrait_selected(self, text: str):
         if not text: return
         self.config.setdefault("layout", {})["current_portrait"] = text
         self.rebuild_scene() 
 
-    def on_background_selected(self, text):
+    def on_background_selected(self, text: str):
         if not text: return
         self.config.setdefault("layout", {})["current_background"] = text
         self.rebuild_scene()
 
-    def on_name_changed(self, text):
+    def on_name_changed(self, text: str):
         self.config.setdefault("meta", {})["name"] = text
-        if self.scene_items["name_text"]:
+        if self.scene_items["name_text"] is ResizableTextItem:
             self.scene_items["name_text"].update_content(text=text)
 
     def on_style_changed(self):
@@ -856,12 +888,12 @@ class MainWindow(QMainWindow):
         style["text_color"] = self.btn_text_color.current_color
         style["name_color"] = self.btn_name_color.current_color
         
-        if self.scene_items["main_text"]:
+        if self.scene_items["main_text"] is ResizableTextItem:
             self.scene_items["main_text"].update_content(
                 size=style["font_size"], 
                 color=style["text_color"]
             )
-        if self.scene_items["name_text"]:
+        if self.scene_items["name_text"] is ResizableTextItem:
             self.scene_items["name_text"].update_content(
                 size=style["name_font_size"], 
                 color=style["name_color"]
@@ -873,7 +905,7 @@ class MainWindow(QMainWindow):
             z = Z_PORTRAIT_TOP if self.check_on_top.isChecked() else Z_PORTRAIT_BOTTOM
             self.scene_items["portrait"].setZValue(z)
 
-    def import_asset(self, file_path, asset_type):
+    def import_asset(self, file_path: str, asset_type: str):
         """通用导入逻辑 (拖拽用)"""
         if not self.current_char_id: return
         target_dir = os.path.join(self.char_root, asset_type)
@@ -985,7 +1017,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"操作失败: {e}")
 
-    def delete_asset_file(self, filename, asset_type):
+    def delete_asset_file(self, filename: str, asset_type: str):
         """右键删除文件"""
         if not self.current_char_id: return
         
@@ -1095,18 +1127,19 @@ class MainWindow(QMainWindow):
             
         if self.scene_items["name_text"]:
             item = self.scene_items["name_text"]
-            top_left = item.mapToScene(item.rect().topLeft())
-            layout["name_pos"] = [int(top_left.x()), int(top_left.y())]
+            if item is ScalableImageItem:
+                top_left = item.mapToScene(item.rect().topLeft())
+                layout["name_pos"] = [int(top_left.x()), int(top_left.y())]
             
         if self.scene_items["main_text"]:
             item = self.scene_items["main_text"]
-            rect = item.rect()
-            p1 = item.mapToScene(rect.topLeft())
-            p2 = item.mapToScene(rect.bottomRight())
-            x1, y1 = int(p1.x()), int(p1.y())
-            x2, y2 = int(p2.x()), int(p2.y())
-            layout["text_area"] = [min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)]
-
+            if item is ResizableTextItem:
+                rect = item.rect()
+                p1 = item.mapToScene(rect.topLeft())
+                p2 = item.mapToScene(rect.bottomRight())
+                x1, y1 = int(p1.x()), int(p1.y())
+                x2, y2 = int(p2.x()), int(p2.y())
+                layout["text_area"] = [min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)]
     def save_config(self):
         if not self.current_char_id: return
         
@@ -1115,7 +1148,9 @@ class MainWindow(QMainWindow):
         try:
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, ensure_ascii=False, indent=4)
-            self.statusBar().showMessage(f"已保存: {self.current_char_id}", 3000)
+                statusBar = self.statusBar()
+            if statusBar is not None:
+                statusBar.showMessage(f"已保存: {self.current_char_id}", 3000)
         except Exception as e:
             QMessageBox.critical(self, "保存失败", str(e))
 

@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 GLOBAL_CONFIG_PATH = os.path.join(os.getcwd(), "global_config.json")
 

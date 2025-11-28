@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -27,7 +27,7 @@ class CharacterRenderer:
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = json.load(f)
 
-        self.assets: Dict[str, object] = {
+        self.assets: Dict[str, Any] = {
             "dialog_box": None,
             "portraits": {},
             "backgrounds": {},
@@ -97,9 +97,11 @@ class CharacterRenderer:
         bg_key: Optional[str] = None,
         speaker_name: Optional[str] = None,
     ) -> Image.Image:
-        portrait_key = portrait_key or self._first_key(self.assets["portraits"])  # type: ignore
-        bg_key = bg_key or self._first_key(self.assets["backgrounds"])  # type: ignore
+        portrait_key = portrait_key or self._first_key(self.assets["portraits"])
+        bg_key = bg_key or self._first_key(self.assets["backgrounds"])
 
+        if not portrait_key or not bg_key:
+            raise ValueError("无法渲染: 未提供立绘或背景")
         canvas = self._get_base_canvas(portrait_key, bg_key)
         draw = ImageDraw.Draw(canvas)
         self._draw_text(draw, text, speaker_name)
@@ -119,22 +121,23 @@ class CharacterRenderer:
         canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
 
         # 背景
-        bg = self.assets["backgrounds"].get(bg_key) or self._first_value(self.assets["backgrounds"])  # type: ignore
+        bg = self.assets["backgrounds"].get(bg_key) or self._first_value(self.assets["backgrounds"])
         if bg:
-            bg_resized = bg.resize((canvas_w, canvas_h), Image.LANCZOS)
+            bg_resized = bg.resize((canvas_w, canvas_h), Image.Resampling.LANCZOS)
             canvas.paste(bg_resized, (0, 0))
 
         layout = self.config.get("layout", {})
 
         # 立绘
-        portrait = self.assets["portraits"].get(portrait_key) or self._first_value(self.assets["portraits"])  # type: ignore
+        portrait = self.assets["portraits"].get(portrait_key) or self._first_value(self.assets["portraits"])
+        stand_pos = None
         if portrait:
             stand_scale = layout.get("stand_scale", 1.0)
             if stand_scale != 1.0:
                 new_w = int(portrait.width * stand_scale)
                 new_h = int(portrait.height * stand_scale)
-                portrait = portrait.resize((new_w, new_h), Image.LANCZOS)
-            stand_pos = tuple(layout.get("stand_pos", (0, 0)))
+                portrait = portrait.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            stand_pos= tuple(layout.get("stand_pos", (0, 0)))
 
         # 对话框：拉满宽度并贴底
         dialog_box = self.assets.get("dialog_box")
@@ -163,7 +166,7 @@ class CharacterRenderer:
         if box_img.width != canvas_w:
             scale = canvas_w / box_img.width
             new_h = int(box_img.height * scale)
-            box_img = box_img.resize((canvas_w, new_h), Image.LANCZOS)
+            box_img = box_img.resize((canvas_w, new_h), Image.Resampling.LANCZOS)
         box_pos = (0, canvas_h - box_img.height)
         return box_img, box_pos
 
@@ -179,19 +182,19 @@ class CharacterRenderer:
 
         font_text_path = self._resolve_font_path(style.get("font_file"))
         font_name_path = self._resolve_font_path(style.get("name_font_file"))
-        font_text: ImageFont.FreeTypeFont = self._get_font(text_size, font_text_path)  # type: ignore
-        font_name: ImageFont.FreeTypeFont = self._get_font(name_size, font_name_path)  # type: ignore
+        font_text: ImageFont.ImageFont = self._get_font(text_size, font_text_path)
+        font_name: ImageFont.ImageFont = self._get_font(name_size, font_name_path)
 
         layout = self.config.get("layout", {})
         text_area = layout.get("text_area", [100, 800, 1800, 1000])
-        name_pos = layout.get("name_pos", [100, 100])
+        name_pos : Tuple[float, float] = layout.get("name_pos", [100, 100])
 
         if speaker_name is None:
             speaker_name = self.config.get("meta", {}).get("name", self.char_id)
 
         # 名字
         if speaker_name:
-            draw.text(tuple(name_pos), speaker_name, font=font_name, fill=name_color)
+            draw.text(name_pos, speaker_name, font=font_name, fill=name_color)
 
         # 正文
         x1, y1, x2, y2 = text_area

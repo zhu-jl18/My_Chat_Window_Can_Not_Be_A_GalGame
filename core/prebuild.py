@@ -41,7 +41,7 @@ def _fit_dialog_box_to_canvas(box_img: Image.Image) -> Tuple[Image.Image, Tuple[
     if box_img.width != canvas_w:
         scale = canvas_w / box_img.width
         new_h = int(box_img.height * scale)
-        box_img = box_img.resize((canvas_w, new_h), Image.LANCZOS)
+        box_img = box_img.resize((canvas_w, new_h), Image.Resampling.LANCZOS)
     box_pos = (0, canvas_h - box_img.height)
     return box_img, box_pos
 
@@ -99,7 +99,7 @@ def prebuild_character(char_id: str, base_path: str = BASE_PATH, cache_path: str
         if stand_scale != 1.0:
             new_w = int(p_img.width * stand_scale)
             new_h = int(p_img.height * stand_scale)
-            p_img = p_img.resize((new_w, new_h), Image.LANCZOS)
+            p_img = p_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         p_key = os.path.splitext(p_file)[0]
 
@@ -109,7 +109,7 @@ def prebuild_character(char_id: str, base_path: str = BASE_PATH, cache_path: str
             canvas = Image.new("RGBA", CANVAS_SIZE)
 
             bg_img = Image.open(os.path.join(bg_dir, b_file)).convert("RGBA")
-            bg_resized = bg_img.resize(CANVAS_SIZE, Image.LANCZOS)
+            bg_resized = bg_img.resize(CANVAS_SIZE, Image.Resampling.LANCZOS)
             canvas.paste(bg_resized, (0, 0))
 
             if stand_on_top:
