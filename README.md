@@ -198,8 +198,6 @@ My_Chat_Window.../
 * **[makoMako](https://github.com/makoMako)** - 代码优化与功能完善
 * **[IzumiShizuki](https://github.com/IzumiShizuki)** - 代码贡献与问题修复
 
-也感谢每一位 Star、Fork、提 Issue 的朋友，你们的支持是我继续更新的动力！
-
 ---
 
 ## 📄 开源协议
