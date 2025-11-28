@@ -159,7 +159,7 @@ class CharacterRenderer:
         portrait_key = portrait_key or self._first_key(self.assets["portraits"])  # type: ignore[arg-type]
         bg_key = bg_key or self._first_key(self.assets["backgrounds"])  # type: ignore[arg-type]
 
-        canvas = self._get_base_canvas(portrait_key, bg_key)
+        canvas = self._get_base_canvas(portrait_key, bg_key).copy()
         draw = ImageDraw.Draw(canvas)
         self._draw_text(draw, text, speaker_name)
         return canvas
