@@ -22,8 +22,8 @@ class AssetListWidget(QListWidget):
         if e and mime:
             if mime.hasUrls():
                 e.accept()
-
-        e.ignore()
+        else:
+            e.ignore()
             
     def dropEvent(self, e: QDropEvent): # pyright: ignore[reportIncompatibleMethodOverride]
         mime = e.mimeData()

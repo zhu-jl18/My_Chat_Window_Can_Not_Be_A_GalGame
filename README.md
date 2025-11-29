@@ -1,6 +1,5 @@
 # 🎮 My Chat Window Can Not Be A GalGame
-
-> **(我的聊天窗口不可能是 GalGame)**
+**(我的聊天窗口不可能是 GalGame)**
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![PyQt6](https://img.shields.io/badge/PyQt-6.0+-green.svg)
@@ -9,7 +8,7 @@
 
 ## 📖 简介
 
-**这是一个出于对二次元角色的热爱，由一名学生开发者（也就是我）利用课余时间“拉”出来的项目。**
+**这是一个出于对二次元角色的热爱，由一名学生开发者（也就是我）利用课余时间"拉"出来的项目。**
 
 你是否想过，在 QQ、微信或 Discord 上与朋友聊天时，能像 GalGame（美少女游戏）一样，配合着角色的立绘、精美的对话框和表情差分来传达你的心意？
 
@@ -22,16 +21,17 @@
 * **🚀 无感触发**：在任何聊天软件中输入文字，按下 `Enter` 键，瞬间生成图片并发送，无需手动截图。
 * **🎭 实时表情切换**：通过 `Alt + 1~9` 快捷键，在对话中实时切换角色的不同立绘（表情），让对话生动起来。
 * **🛠️ 可视化编辑器**：
-  * **所见即所得**：实时预览渲染效果。
-  * **自由布局**：鼠标拖拽调整立绘、文字区域的位置和大小。
-  * **自动贴合**：智能计算对话框位置，自动贴合底部。
+    * **所见即所得**：实时预览渲染效果。
+    * **自由布局**：鼠标拖拽调整立绘、文字区域的位置和大小。
+    * **多分辨率支持**：从 720p 到 4K，自由切换画布尺寸。
+    * **自动贴合**：智能计算对话框位置，自动贴合底部。
 * **🎨 高度定制化**：支持自定义字体（内置霞鹜文楷）、字号、颜色、背景图、对话框样式。
-* **⚡ 高性能缓存**：内置预处理和缓存机制，生成速度极快，几乎无延迟。
+* **⚡ 高性能缓存**：三级缓存体系（内存 → 磁盘 → 预缩放），生成速度极快，几乎无延迟。
 
 ## 🖼️ 效果展示
 
-![gui](https://github.com/user-attachments/assets/68a23079-4a58-4791-8c27-5e2a205f82a6)
-![case](https://github.com/user-attachments/assets/76ae7636-2367-440b-b6b2-d4f92725e9af)
+<img width="2560" height="1321" alt="编辑器界面" src="https://github.com/user-attachments/assets/68a23079-4a58-4791-8c27-5e2a205f82a6" />
+<img width="2560" height="1440" alt="渲染效果" src="https://github.com/user-attachments/assets/76ae7636-2367-440b-b6b2-d4f92725e9af" />
 
 ---
 
@@ -63,12 +63,8 @@ python -m venv .venv
 # source .venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
 
-# 方式 B: 直接安装到系统 Python （不推荐）
+# 方式 B: 直接安装到系统 Python
 pip install -r requirements.txt
-
-# 方式 C: 使用 uv 管理 venv （需额外安装 uv）
-uv venv
-uv pip sync requirements.txt
 ```
 
 > 💡 **提示**: 批处理文件 (`run_gui.bat`, `run_main.bat`) 已兼容两种方式。如果存在 `.venv` 目录则自动使用虚拟环境，否则使用系统 Python。
