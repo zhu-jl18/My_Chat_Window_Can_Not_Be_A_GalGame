@@ -3,7 +3,7 @@
 import json
 import os
 from copy import deepcopy
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Mapping
 
 GLOBAL_CONFIG_PATH = os.path.join(os.getcwd(), "global_config.json")
 
@@ -118,13 +118,9 @@ def normalize_layout(
     return normalized
 
 
-def normalize_style(style: Dict[str, Any] | None) -> Dict[str, Any]:
+def normalize_style(style: Mapping[str, Any] | None) -> Dict[str, Any]:
     """Normalize style dict for per-character config, keeping backward compatibility."""
-    src: Dict[str, Any]
-    if isinstance(style, dict):
-        src = style
-    else:
-        src = {}
+    src: Dict[str, Any] = dict(style) if isinstance(style, Mapping) else {}
 
     normalized: Dict[str, Any] = {
         "mode": "basic",
@@ -137,7 +133,8 @@ def normalize_style(style: Dict[str, Any] | None) -> Dict[str, Any]:
     if isinstance(mode, str) and mode.lower() in {"basic", "advanced"}:
         normalized["mode"] = mode.lower()
 
-    wrapper_src = src.get("text_wrapper") if isinstance(src.get("text_wrapper"), dict) else {}
+    wrapper_candidate = src.get("text_wrapper")
+    wrapper_src: Dict[str, Any] = dict(wrapper_candidate) if isinstance(wrapper_candidate, Mapping) else {}
     wrapper = normalized["text_wrapper"]
     w_type = wrapper_src.get("type")
     if isinstance(w_type, str) and w_type in {"none", "preset", "custom"}:
@@ -157,7 +154,8 @@ def normalize_style(style: Dict[str, Any] | None) -> Dict[str, Any]:
         wrapper["prefix"] = ""
         wrapper["suffix"] = ""
 
-    basic_src = src.get("basic") if isinstance(src.get("basic"), dict) else {}
+    basic_candidate = src.get("basic")
+    basic_src: Dict[str, Any] = dict(basic_candidate) if isinstance(basic_candidate, Mapping) else {}
     normalized["basic"]["font_size"] = _coerce_int(
         basic_src.get("font_size", src.get("font_size")),
         DEFAULT_BASIC_STYLE["font_size"],
@@ -175,7 +173,8 @@ def normalize_style(style: Dict[str, Any] | None) -> Dict[str, Any]:
         DEFAULT_BASIC_STYLE["name_color"],
     )
 
-    advanced_src = src.get("advanced") if isinstance(src.get("advanced"), dict) else {}
+    advanced_candidate = src.get("advanced")
+    advanced_src: Dict[str, Any] = dict(advanced_candidate) if isinstance(advanced_candidate, Mapping) else {}
     layers = advanced_src.get("name_layers")
     if isinstance(layers, dict):
         normalized["advanced"]["name_layers"] = deepcopy(layers)
