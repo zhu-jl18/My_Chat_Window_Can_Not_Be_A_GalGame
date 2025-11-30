@@ -168,6 +168,33 @@ My_Chat_Window.../
         "canvas_size": [1920, 1080],
         "cache_format": "jpeg",
         "jpeg_quality": 90
+    },
+    "style": {
+        "mode": "basic",
+        "text_wrapper": {
+            "type": "preset",
+            "preset": "corner_single",
+            "prefix": "「",
+            "suffix": "」"
+        },
+        "basic": {
+            "font_size": 40,
+            "text_color": [255, 255, 255],
+            "name_font_size": 30,
+            "name_color": [255, 85, 255]
+        },
+        "advanced": {
+            "name_layers": {
+                "default": [
+                    {
+                        "text": "{name}",
+                        "position": [0, 0],
+                        "font_color": [255, 255, 255],
+                        "font_size": 30
+                    }
+                ]
+            }
+        }
     }
 }
 ```
@@ -180,6 +207,34 @@ My_Chat_Window.../
 | `canvas_size` | 渲染分辨率，可在编辑器中切换 |
 | `cache_format` | 缓存格式：`jpeg`（小而快）或 `png`（无损） |
 | `jpeg_quality` | JPEG 质量 (1-100) |
+| `style.text_wrapper.type` | 台词前后缀模式：`none`、`preset`（内置「」「」/『』『』）、`custom` |
+| `style.mode` | 名字样式模式：`basic` 使用字号/颜色，`advanced` 启用 JSON 分层 |
+| `style.advanced.name_layers` | 高级名字 JSON，键为角色名，值为图层数组（支持 `{name}` 占位） |
+
+#### 名字高级样式示例
+
+```jsonc
+"name_layers": {
+    "warden": [
+        {"text": "典", "position": [0, 0], "font_color": [195, 209, 231], "font_size": 196},
+        {"text": "狱", "position": [200, 100], "font_color": [255, 255, 255], "font_size": 92},
+        {"text": "长", "position": [300, 50], "font_color": [255, 255, 255], "font_size": 147}
+    ],
+    "default": [
+        {"text": "{name}", "position": [0, 0], "font_color": [255, 85, 255], "font_size": 32}
+    ]
+}
+```
+
+字段说明：
+- `text`：要绘制的字符，可使用 `{name}` 占位符自动替换为当前角色名称。
+- `position`：相对 `layout.name_pos` 的偏移量 `[x, y]`，单位为像素。原点仍由编辑器中拖拽的名称坐标决定。
+- `font_color`：RGB 颜色数组。
+- `font_size`：字号，单位为像素。
+- `font_file`：可选，指定单层使用的字体文件（相对角色目录或绝对路径）。
+- `name_layers` 字典的键为角色名称；若找不到匹配的键，将使用 `default` 作为回退。
+
+> GUI 的属性面板中可以直接切换台词前后缀（「」「」 / 『』『』 / 自定义），并展开“高级名称 JSON”输入框来粘贴上面的结构。
 
 ---
 

@@ -6,7 +6,7 @@ from typing import Any, Dict, Tuple, List
 
 # --- 尝试导入后端模块 ---
 try:
-    from core.utils import load_global_config, save_global_config, normalize_layout # pyright: ignore[reportAssignmentType]
+    from core.utils import load_global_config, save_global_config, normalize_layout, normalize_style  # pyright: ignore[reportAssignmentType]
     from core.renderer import CharacterRenderer
     from core.prebuild import prebuild_character
 except ImportError:
@@ -14,6 +14,7 @@ except ImportError:
     def load_global_config() -> Dict[str, Any]: return {}
     def save_global_config(cfg: Dict[str, Any]) -> None: pass
     def normalize_layout(layout, canvas): return layout or {}
+    def normalize_style(style): return style or {}
     CharacterRenderer = None
     prebuild_character = None
 

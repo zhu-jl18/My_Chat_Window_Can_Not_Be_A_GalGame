@@ -3,7 +3,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QScrollArea, QGroupBox, QLineEdit, QSpinBox,
-    QCheckBox, QLabel, QPushButton, QComboBox
+    QCheckBox, QLabel, QPushButton, QComboBox, QPlainTextEdit
 )
 
 from ..widgets import ColorButton
@@ -53,8 +53,46 @@ class PropsPanel(QScrollArea):
         row_name.addWidget(self.btn_name_color)
         form_style.addRow("名字 (大小/色):", row_name)
 
+        self.check_name_advanced = QCheckBox("启用高级名称 JSON")
+        form_style.addRow(self.check_name_advanced)
+
+        self.lbl_name_json = QLabel("高级 JSON:")
+        self.name_json_container = QWidget()
+        json_layout = QVBoxLayout(self.name_json_container)
+        json_layout.setContentsMargins(0, 0, 0, 0)
+        self.edit_name_json = QPlainTextEdit()
+        self.edit_name_json.setPlaceholderText("示例: {\"default\": [{\"text\": \"{name}\", \"position\": [0,0]}]}")
+        self.btn_apply_name_json = QPushButton("应用 JSON")
+        self.btn_reset_name_json = QPushButton("恢复默认示例")
+        json_layout.addWidget(self.edit_name_json)
+        json_layout.addWidget(self.btn_apply_name_json)
+        json_layout.addWidget(self.btn_reset_name_json)
+        form_style.addRow(self.lbl_name_json, self.name_json_container)
+        self.set_advanced_json_visible(False)
+
         group_style.setLayout(form_style)
         layout.addWidget(group_style)
+
+        # --- 台词前后缀 ---
+        group_wrapper = QGroupBox("台词前后缀")
+        form_wrapper = QFormLayout()
+        self.combo_wrapper_mode = QComboBox()
+        self.combo_wrapper_mode.addItem("无", {"type": "none"})
+        self.combo_wrapper_mode.addItem("「」", {"type": "preset", "preset": "corner_single"})
+        self.combo_wrapper_mode.addItem("『』", {"type": "preset", "preset": "corner_double"})
+        self.combo_wrapper_mode.addItem("自定义", {"type": "custom"})
+        form_wrapper.addRow("模式:", self.combo_wrapper_mode)
+
+        self.edit_wrapper_prefix = QLineEdit()
+        self.edit_wrapper_prefix.setPlaceholderText("前缀")
+        form_wrapper.addRow("前缀:", self.edit_wrapper_prefix)
+
+        self.edit_wrapper_suffix = QLineEdit()
+        self.edit_wrapper_suffix.setPlaceholderText("后缀")
+        form_wrapper.addRow("后缀:", self.edit_wrapper_suffix)
+        group_wrapper.setLayout(form_wrapper)
+        layout.addWidget(group_wrapper)
+        self.set_wrapper_custom_enabled(False)
 
         # --- 画布设置 ---
         group_canvas = QGroupBox("画布设置")
@@ -94,3 +132,11 @@ class PropsPanel(QScrollArea):
         for w, h in COMMON_RESOLUTIONS:
             label = f"{w} x {h}"
             self.combo_resolution.addItem(label, (w, h))
+
+    def set_wrapper_custom_enabled(self, enabled: bool) -> None:
+        self.edit_wrapper_prefix.setEnabled(enabled)
+        self.edit_wrapper_suffix.setEnabled(enabled)
+
+    def set_advanced_json_visible(self, visible: bool) -> None:
+        self.lbl_name_json.setVisible(visible)
+        self.name_json_container.setVisible(visible)

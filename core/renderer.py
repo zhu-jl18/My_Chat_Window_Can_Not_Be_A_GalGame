@@ -5,13 +5,16 @@ from typing import Dict, Optional, Tuple, Any, List
 from PIL import Image, ImageDraw, ImageFont
 
 try:
-    from .utils import load_global_config, normalize_layout
+    from .utils import load_global_config, normalize_layout, normalize_style
 except Exception:  # pragma: no cover - fallback for standalone runs
     def load_global_config() -> Dict[str, object]:
         return {}
 
     def normalize_layout(layout, canvas_size):
         return layout or {}
+
+    def normalize_style(style):
+        return style or {}
 
 def _load_render_config() -> Tuple[Tuple[int, int], str, str, bool]:
     cfg:dict = load_global_config() or {}
@@ -56,6 +59,9 @@ class CharacterRenderer:
         self.layout = normalize_layout(layout_raw, self.canvas_size)
         self.layout["_canvas_size"] = [self.canvas_size[0], self.canvas_size[1]]
         self.config["layout"] = self.layout
+        style_raw = self.config.get("style", {})
+        self.config["style"] = normalize_style(style_raw)
+        self.style = self.config["style"]
         self.assets: Dict[str, Any] = {
             "dialog_box": None,
             "portraits": {},
@@ -139,9 +145,10 @@ class CharacterRenderer:
             print(f"⚠️ 警告: 找不到对话框图片 {box_path}")
 
         # 字体
-        style = self.config.get("style", {})
-        font_size = style.get("font_size", 40)
-        text_font_file = style.get("font_file")
+        style_basic = self.style.get("basic", {})
+        font_size = int(style_basic.get("font_size", 40))
+        font_size = font_size if font_size > 0 else 40
+        text_font_file = self.style.get("font_file")
         self.assets["font"] = self._get_font(font_size, self._resolve_font_path(text_font_file))
 
     # -----------------------
@@ -252,29 +259,34 @@ class CharacterRenderer:
     # 文本绘制
     # -----------------------
     def _draw_text(self, draw: ImageDraw.ImageDraw, text: str, speaker_name: Optional[str]):
-        style = self.config.get("style", {})
-        text_color = tuple(style.get("text_color", (255, 255, 255)))
-        name_color = tuple(style.get("name_color", (253, 145, 175)))
-        text_size = style.get("font_size", 40)
-        name_size = style.get("name_font_size", text_size)
+        style = self.style
+        basic = style.get("basic", {})
+        text_color = self._color_tuple(basic.get("text_color"), (255, 255, 255))
+        name_color = self._color_tuple(basic.get("name_color"), (253, 145, 175))
+        text_size = max(1, int(basic.get("font_size", 40)))
+        name_size = max(1, int(basic.get("name_font_size", text_size)))
 
         font_text_path = self._resolve_font_path(style.get("font_file"))
         font_name_path = self._resolve_font_path(style.get("name_font_file"))
-        font_text: ImageFont.ImageFont| ImageFont.FreeTypeFont = self._get_font(text_size, font_text_path)
-        font_name: ImageFont.ImageFont| ImageFont.FreeTypeFont = self._get_font(name_size, font_name_path)
+        font_text: ImageFont.ImageFont | ImageFont.FreeTypeFont = self._get_font(text_size, font_text_path)
+        font_name: ImageFont.ImageFont | ImageFont.FreeTypeFont = self._get_font(name_size, font_name_path)
 
         layout = self.layout
         text_area = layout.get("text_area", [100, 800, 1800, 1000])
-        name_pos : Tuple[float, float] = layout.get("name_pos", [100, 100])
+        name_pos: Tuple[float, float] = layout.get("name_pos", [100, 100])
 
         if speaker_name is None:
             speaker_name = self.config.get("meta", {}).get("name", self.char_id)
 
         # 名字
-        if speaker_name:
-            draw.text(name_pos, speaker_name, font=font_name, fill=name_color)
+        name_drawn = False
+        if style.get("mode") == "advanced":
+            name_drawn = self._draw_advanced_name(draw, speaker_name, name_pos)
+        if not name_drawn:
+            self._draw_basic_name(draw, speaker_name, name_pos, font_name, name_color)
 
         # 正文
+        text = self._apply_text_wrapper(text, style)
         x1, y1, x2, y2 = text_area
         max_width = max(10, x2 - x1)
         lines = self._wrap_text(text, draw, font_text, max_width)
@@ -285,6 +297,102 @@ class CharacterRenderer:
             if y > y2 - line_height:
                 break
             draw.text((x1, y), line, font=font_text, fill=text_color)
+
+    def _apply_text_wrapper(self, text: str, style: Dict[str, Any]) -> str:
+        wrapper = style.get("text_wrapper", {})
+        if not isinstance(wrapper, dict):
+            return text
+        prefix, suffix = self._resolve_wrapper_tokens(wrapper)
+        w_type = wrapper.get("type", "none")
+        if w_type == "none" or (not prefix and not suffix):
+            return text
+
+        if not text:
+            return f"{prefix}{suffix}" if (prefix or suffix) else text
+        return f"{prefix}{text}{suffix}"
+
+    def _resolve_wrapper_tokens(self, wrapper: Dict[str, Any]) -> Tuple[str, str]:
+        w_type = wrapper.get("type", "none")
+        if w_type == "preset":
+            preset = wrapper.get("preset", "corner_single")
+            if preset == "corner_double":
+                return "『", "』"
+            return "「", "」"
+        if w_type == "custom":
+            prefix = wrapper.get("prefix", "")
+            suffix = wrapper.get("suffix", "")
+            return str(prefix or ""), str(suffix or "")
+        return "", ""
+
+    def _draw_basic_name(
+        self,
+        draw: ImageDraw.ImageDraw,
+        speaker_name: Optional[str],
+        name_pos: Tuple[float, float],
+        font: ImageFont.ImageFont | ImageFont.FreeTypeFont,
+        color: Tuple[int, int, int],
+    ) -> None:
+        if speaker_name:
+            draw.text(name_pos, speaker_name, font=font, fill=color)
+
+    def _draw_advanced_name(
+        self,
+        draw: ImageDraw.ImageDraw,
+        speaker_name: Optional[str],
+        name_pos: Tuple[float, float],
+    ) -> bool:
+        advanced = self.style.get("advanced", {})
+        layers_map = advanced.get("name_layers")
+        if not isinstance(layers_map, dict):
+            return False
+
+        target_layers: Optional[List[Dict[str, Any]]] = None
+        if speaker_name and speaker_name in layers_map:
+            target_layers = layers_map[speaker_name]
+        elif "default" in layers_map:
+            target_layers = layers_map["default"]
+
+        if not isinstance(target_layers, list):
+            return False
+
+        base_x, base_y = float(name_pos[0]), float(name_pos[1])
+        basic = self.style.get("basic", {})
+        fallback_color = self._color_tuple(basic.get("name_color"), (255, 255, 255))
+        fallback_size = max(1, int(basic.get("name_font_size", 32)))
+        rendered = False
+
+        for entry in target_layers:
+            if not isinstance(entry, dict):
+                continue
+            text_value = entry.get("text", "")
+            if speaker_name is not None:
+                text_value = str(text_value).replace("{name}", speaker_name)
+            else:
+                text_value = str(text_value)
+
+            position = entry.get("position", [0, 0])
+            if (
+                not isinstance(position, (list, tuple))
+                or len(position) != 2
+            ):
+                offset_x, offset_y = 0.0, 0.0
+            else:
+                offset_x = float(position[0])
+                offset_y = float(position[1])
+
+            abs_pos = (base_x + offset_x, base_y + offset_y)
+
+            font_size = entry.get("font_size", fallback_size)
+            font_size = max(1, int(font_size)) if isinstance(font_size, (int, float)) else fallback_size
+            font_file = entry.get("font_file")
+            font = self._get_font(font_size, self._resolve_font_path(font_file))
+
+            color = self._color_tuple(entry.get("font_color"), fallback_color)
+
+            draw.text(abs_pos, text_value, font=font, fill=color)
+            rendered = True
+
+        return rendered
 
     def _wrap_text(self, text: str, draw: ImageDraw.ImageDraw, font: ImageFont.ImageFont| ImageFont.FreeTypeFont, max_width: int):
         lines = []
@@ -307,6 +415,16 @@ class CharacterRenderer:
     def _line_height(self, font: ImageFont.ImageFont| ImageFont.FreeTypeFont) -> int | float:
         bbox = font.getbbox("测试")
         return (bbox[3] - bbox[1]) + 4
+
+    @staticmethod
+    def _color_tuple(value: Any, fallback: Tuple[int, int, int]) -> Tuple[int, int, int]:
+        if (
+            isinstance(value, (list, tuple))
+            and len(value) == 3
+            and all(isinstance(v, (int, float)) for v in value)
+        ):
+            return tuple(max(0, min(255, int(v))) for v in value)  # type: ignore[return-value]
+        return fallback
 
     def _resolve_font_path(self, font_file: Optional[str]) -> Optional[str]:
         """Resolve a font path with fallbacks."""

@@ -358,6 +358,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 }
 ```
 
+- `normalize_style()`：为每个角色的 `style` 字段补齐 `mode`、`text_wrapper`、`basic`、`advanced` 结构，兼容旧版 `font_size/name_color` 写法，并自动处理台词前后缀与高级名字 JSON。
+
 ### `engine.py` - 主引擎 (v2.2 更新) ⭐
 
 #### 核心变更：移除自动发送
@@ -474,6 +476,41 @@ def reload_config(self):
     }
 }
 ```
+
+### 角色 `style` 结构 (`assets/characters/<id>/config.json`)
+
+```jsonc
+"style": {
+    "mode": "advanced",
+    "text_wrapper": {
+        "type": "preset",
+        "preset": "corner_double",
+        "prefix": "『",
+        "suffix": "』"
+    },
+    "basic": {
+        "font_size": 40,
+        "text_color": [255, 255, 255],
+        "name_font_size": 32,
+        "name_color": [255, 85, 255]
+    },
+    "advanced": {
+        "name_layers": {
+            "warden": [
+                {"text": "典", "position": [0, 0], "font_color": [195, 209, 231], "font_size": 196},
+                {"text": "狱", "position": [200, 100], "font_color": [255, 255, 255], "font_size": 92},
+                {"text": "长", "position": [300, 50], "font_color": [255, 255, 255], "font_size": 147}
+            ],
+            "default": [
+                {"text": "{name}", "position": [0, 0], "font_color": [255, 85, 255], "font_size": 32}
+            ]
+        }
+    }
+}
+```
+
+- GUI 属性面板新增「台词前后缀」组合框，可选 `none` / 「」「」 / 『』『』 / 自定义前后缀，并直接写入 `text_wrapper`。
+- 勾选“启用高级名称 JSON”后会展开输入框，可编辑 `name_layers` 并点击“应用 JSON”即时保存，渲染器会按相对坐标叠加多层文本。
 
 ### 快捷键格式说明
 

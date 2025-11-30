@@ -2,6 +2,7 @@
 
 import json
 import os
+from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 GLOBAL_CONFIG_PATH = os.path.join(os.getcwd(), "global_config.json")
@@ -11,6 +12,24 @@ DEFAULT_RENDER_CONFIG: Dict[str, Any] = {
     "cache_format": "jpeg",
     "jpeg_quality": 90,
     "use_memory_canvas_cache": True,
+}
+
+DEFAULT_TEXT_WRAPPER: Dict[str, Any] = {
+    "type": "none",  # none | preset | custom
+    "preset": "corner_single",  # corner_single → 「」, corner_double → 『』
+    "prefix": "",
+    "suffix": "",
+}
+
+DEFAULT_BASIC_STYLE: Dict[str, Any] = {
+    "font_size": 40,
+    "text_color": [255, 255, 255],
+    "name_font_size": 32,
+    "name_color": [255, 85, 255],
+}
+
+DEFAULT_ADVANCED_STYLE: Dict[str, Any] = {
+    "name_layers": {}
 }
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -99,6 +118,77 @@ def normalize_layout(
     return normalized
 
 
+def normalize_style(style: Dict[str, Any] | None) -> Dict[str, Any]:
+    """Normalize style dict for per-character config, keeping backward compatibility."""
+    src: Dict[str, Any]
+    if isinstance(style, dict):
+        src = style
+    else:
+        src = {}
+
+    normalized: Dict[str, Any] = {
+        "mode": "basic",
+        "text_wrapper": deepcopy(DEFAULT_TEXT_WRAPPER),
+        "basic": deepcopy(DEFAULT_BASIC_STYLE),
+        "advanced": deepcopy(DEFAULT_ADVANCED_STYLE),
+    }
+
+    mode = src.get("mode")
+    if isinstance(mode, str) and mode.lower() in {"basic", "advanced"}:
+        normalized["mode"] = mode.lower()
+
+    wrapper_src = src.get("text_wrapper") if isinstance(src.get("text_wrapper"), dict) else {}
+    wrapper = normalized["text_wrapper"]
+    w_type = wrapper_src.get("type")
+    if isinstance(w_type, str) and w_type in {"none", "preset", "custom"}:
+        wrapper["type"] = w_type
+    preset = wrapper_src.get("preset")
+    if isinstance(preset, str):
+        wrapper["preset"] = preset
+    prefix = wrapper_src.get("prefix")
+    if isinstance(prefix, str):
+        wrapper["prefix"] = prefix
+    suffix = wrapper_src.get("suffix")
+    if isinstance(suffix, str):
+        wrapper["suffix"] = suffix
+    if wrapper["type"] == "preset":
+        wrapper["prefix"], wrapper["suffix"] = _wrapper_tokens_from_preset(wrapper["preset"])
+    elif wrapper["type"] == "none":
+        wrapper["prefix"] = ""
+        wrapper["suffix"] = ""
+
+    basic_src = src.get("basic") if isinstance(src.get("basic"), dict) else {}
+    normalized["basic"]["font_size"] = _coerce_int(
+        basic_src.get("font_size", src.get("font_size")),
+        DEFAULT_BASIC_STYLE["font_size"],
+    )
+    normalized["basic"]["name_font_size"] = _coerce_int(
+        basic_src.get("name_font_size", src.get("name_font_size")),
+        DEFAULT_BASIC_STYLE["name_font_size"],
+    )
+    normalized["basic"]["text_color"] = _coerce_color(
+        basic_src.get("text_color", src.get("text_color")),
+        DEFAULT_BASIC_STYLE["text_color"],
+    )
+    normalized["basic"]["name_color"] = _coerce_color(
+        basic_src.get("name_color", src.get("name_color")),
+        DEFAULT_BASIC_STYLE["name_color"],
+    )
+
+    advanced_src = src.get("advanced") if isinstance(src.get("advanced"), dict) else {}
+    layers = advanced_src.get("name_layers")
+    if isinstance(layers, dict):
+        normalized["advanced"]["name_layers"] = deepcopy(layers)
+    else:
+        normalized["advanced"]["name_layers"] = {}
+
+    for extra_key, extra_value in src.items():
+        if extra_key not in {"mode", "text_wrapper", "basic", "advanced"}:
+            normalized[extra_key] = extra_value
+
+    return normalized
+
+
 def _ensure_dict(config: Dict[str, Any], key: str, fallback: Dict[str, Any]) -> None:
     if key not in config or not isinstance(config[key], dict):
         config[key] = dict(fallback)
@@ -106,6 +196,29 @@ def _ensure_dict(config: Dict[str, Any], key: str, fallback: Dict[str, Any]) -> 
         merged = dict(fallback)
         merged.update(config[key])
         config[key] = merged
+
+
+def _coerce_int(value: Any, fallback: int) -> int:
+    if isinstance(value, (int, float)):
+        result = int(value)
+        return result if result > 0 else fallback
+    return fallback
+
+
+def _coerce_color(value: Any, fallback: List[int]) -> List[int]:
+    if (
+        isinstance(value, (list, tuple))
+        and len(value) == 3
+        and all(isinstance(v, (int, float)) for v in value)
+    ):
+        return [max(0, min(255, int(v))) for v in value]  # clamp to RGB range
+    return list(fallback)
+
+
+def _wrapper_tokens_from_preset(preset: str) -> Tuple[str, str]:
+    if preset == "corner_double":
+        return "『", "』"
+    return "「", "」"
 
 
 def _determine_source_canvas_size(
