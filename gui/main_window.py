@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QGraphicsSimpleTextItem,
     QDockWidget, QMessageBox, QFileDialog, QInputDialog, QDialog
 )
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtCore import Qt, QRectF, QTimer
 from PyQt6.QtGui import QPixmap, QPen, QBrush, QColor, QPainter, QFont, QFontDatabase, QAction
 
 from .constants import (
@@ -20,7 +20,7 @@ from .constants import (
     load_global_config, save_global_config, normalize_layout, normalize_style,
     dump_yaml_inline, CharacterRenderer, prebuild_character
 )
-from .canvas import ResizableTextItem, ScalableImageItem
+from .canvas import ResizableTextItem, ScalableImageItem, CropAreaItem
 from .widgets import NewCharacterDialog, PrebuildProgressDialog
 from .panels import AssetsPanel, PropsPanel
 
@@ -47,11 +47,14 @@ class MainWindow(QMainWindow):
             "main_text": None
         }
         self.advanced_name_items: List[QGraphicsSimpleTextItem] = []
+        self.crop_area_item: Optional[CropAreaItem] = None
+        self.crop_area_visible = False
 
         self.custom_font_family = ""
         self.cache_outdated = False
         self.resolution_prompted = False
         self._ui_syncing = False
+        self._first_show = True  # 标记是否首次显示
 
         # --- 初始化 ---
         self._load_custom_font()
@@ -207,6 +210,8 @@ class MainWindow(QMainWindow):
         pp.btn_select_dialog_box.clicked.connect(self.select_dialog_box)
         pp.btn_select_font.clicked.connect(self.select_custom_font)
         pp.btn_clear_font.clicked.connect(self.clear_custom_font)
+        pp.check_enable_crop.toggled.connect(self.on_crop_enabled_changed)
+        pp.btn_show_crop_area.clicked.connect(self.toggle_crop_area_visibility)
 
     # =========================================================================
     # 数据加载
@@ -426,6 +431,12 @@ class MainWindow(QMainWindow):
         ap = self.assets_panel
 
         self._ui_syncing = True
+
+        # 裁剪区域配置
+        pp.check_enable_crop.blockSignals(True)
+        pp.check_enable_crop.setChecked(layout.get("enable_crop", False))
+        pp.check_enable_crop.blockSignals(False)
+
         pp.edit_name.blockSignals(True)
         pp.edit_name.setText(meta.get("name", ""))
         pp.edit_name.blockSignals(False)
@@ -509,6 +520,7 @@ class MainWindow(QMainWindow):
     def rebuild_scene(self):
         self.scene_items = {k: None for k in self.scene_items}
         self.advanced_name_items = []
+        self.crop_area_item = None
         self.scene.clear()
 
         canvas_w, canvas_h = CanvasConfig.get_size()
@@ -640,6 +652,10 @@ class MainWindow(QMainWindow):
         self.scene.addItem(text_item)
         self.scene_items["main_text"] = text_item
 
+        # 创建裁剪框（如果启用）
+        if layout.get("enable_crop", False):
+            self._create_crop_area()
+
         self.fit_view()
 
     def _get_preview_sample_text(self, style: Dict[str, Any]) -> str:
@@ -766,6 +782,14 @@ class MainWindow(QMainWindow):
         self.view.resetTransform()
         self.view.fitInView(0, 0, canvas_w, canvas_h, Qt.AspectRatioMode.KeepAspectRatio)
         self.view.scale(0.95, 0.95)
+
+    def showEvent(self, event):
+        """窗口显示事件 - 首次显示时延迟调整视图"""
+        super().showEvent(event)
+        if self._first_show:
+            self._first_show = False
+            # 延迟 100ms 后调整视图，确保窗口已完全显示
+            QTimer.singleShot(100, self.fit_view)
 
     # =========================================================================
     # 事件处理
@@ -939,6 +963,59 @@ class MainWindow(QMainWindow):
         if self.scene_items["portrait"]:
             z = Z_PORTRAIT_TOP if on_top else Z_PORTRAIT_BOTTOM
             self.scene_items["portrait"].setZValue(z)
+
+    def on_crop_enabled_changed(self, enabled: bool):
+        """裁剪启用状态改变"""
+        if getattr(self, "_ui_syncing", False):
+            return
+        self.config.setdefault("layout", {})["enable_crop"] = enabled
+        if enabled and not self.crop_area_item:
+            self._create_crop_area()
+        status_bar = self.statusBar()
+        if status_bar:
+            status_bar.showMessage(f"裁剪功能已{'启用' if enabled else '禁用'}", 2000)
+
+    def toggle_crop_area_visibility(self):
+        """切换裁剪框的显示/隐藏"""
+        if not self.crop_area_item:
+            self._create_crop_area()
+
+        self.crop_area_visible = not self.crop_area_visible
+        if self.crop_area_item:
+            self.crop_area_item.setVisible(self.crop_area_visible)
+
+        status_bar = self.statusBar()
+        if status_bar:
+            status_bar.showMessage(f"裁剪框已{'显示' if self.crop_area_visible else '隐藏'}", 2000)
+
+    def _create_crop_area(self):
+        """创建裁剪区域框"""
+        layout = self.config.get("layout", {})
+        crop_area = layout.get("crop_area")
+
+        canvas_w, canvas_h = CanvasConfig.get_size()
+
+        # 如果没有配置裁剪区域，使用默认值（画布中央 1/2 区域）
+        if not crop_area or not isinstance(crop_area, (list, tuple)) or len(crop_area) != 4:
+            x1 = canvas_w // 4
+            y1 = 0
+            x2 = canvas_w * 3 // 4
+            y2 = canvas_h
+            crop_area = [x1, y1, x2, y2]
+            layout["crop_area"] = crop_area
+
+        x1, y1, x2, y2 = crop_area
+        rect = QRectF(x1, y1, x2 - x1, y2 - y1)
+
+        # 移除旧的裁剪框
+        if self.crop_area_item:
+            self.scene.removeItem(self.crop_area_item)
+
+        # 创建新的裁剪框
+        self.crop_area_item = CropAreaItem(rect)
+        self.crop_area_item.setZValue(Z_TEXT + 1)  # 显示在最上层
+        self.crop_area_item.setVisible(self.crop_area_visible)
+        self.scene.addItem(self.crop_area_item)
 
     def _apply_canvas_size(self, size: Tuple[int, int]):
         old_w, old_h = CanvasConfig.get_size()
@@ -1405,6 +1482,17 @@ class MainWindow(QMainWindow):
             x1, y1 = int(p1.x()), int(p1.y())
             x2, y2 = int(p2.x()), int(p2.y())
             layout["text_area"] = [min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)]
+
+        # 采集裁剪区域
+        if self.crop_area_item:
+            item = self.crop_area_item
+            rect = item.rect()
+            pos = item.pos()
+            x1 = int(pos.x() + rect.left())
+            y1 = int(pos.y() + rect.top())
+            x2 = int(pos.x() + rect.right())
+            y2 = int(pos.y() + rect.bottom())
+            layout["crop_area"] = [x1, y1, x2, y2]
 
         layout["_canvas_size"] = [canvas_w, canvas_h]
 

@@ -165,6 +165,16 @@ def normalize_layout(
             allow_negative=True,
         )
 
+    # 裁剪区域配置
+    if "enable_crop" not in normalized:
+        normalized["enable_crop"] = False
+
+    if "crop_area" in normalized:
+        normalized["crop_area"] = _clamp_rect_to_canvas(
+            normalized.get("crop_area"),
+            canvas_size,
+        )
+
     return normalized
 
 
@@ -376,6 +386,8 @@ def _scale_layout(
         layout["name_pos"] = scale_point(layout.get("name_pos"))
     if "text_area" in layout:
         layout["text_area"] = scale_rect(layout.get("text_area"))
+    if "crop_area" in layout:
+        layout["crop_area"] = scale_rect(layout.get("crop_area"))
 
     return layout
 

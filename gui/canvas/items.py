@@ -212,3 +212,160 @@ class ScalableImageItem(QGraphicsPixmapItem):
             event.accept()
         else:
             super().wheelEvent(event)
+
+
+class CropAreaItem(QGraphicsRectItem):
+    """可拖动、可调整大小的裁剪区域框"""
+
+    HANDLE_SIZE = 10
+    STATE_IDLE = 0
+    STATE_MOVE = 1
+    STATE_RESIZE = 2
+
+    # 方向位掩码
+    DIR_NONE = 0x00
+    DIR_LEFT = 0x01
+    DIR_RIGHT = 0x02
+    DIR_TOP = 0x04
+    DIR_BOTTOM = 0x08
+    DIR_TOP_LEFT = DIR_TOP | DIR_LEFT
+    DIR_TOP_RIGHT = DIR_TOP | DIR_RIGHT
+    DIR_BOTTOM_LEFT = DIR_BOTTOM | DIR_LEFT
+    DIR_BOTTOM_RIGHT = DIR_BOTTOM | DIR_RIGHT
+
+    def __init__(self, rect: QRectF):
+        super().__init__(rect)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setAcceptHoverEvents(True)
+
+        # 裁剪框样式：红色虚线边框，半透明红色填充
+        self.setPen(QPen(QColor(255, 0, 0, 200), 3, Qt.PenStyle.DashLine))
+        self.setBrush(QBrush(QColor(255, 0, 0, 30)))
+
+        self._state = self.STATE_IDLE
+        self._resize_dir = self.DIR_NONE
+        self._start_mouse_pos = QPointF()
+        self._start_rect = QRectF()
+
+    def hoverMoveEvent(self, event: Optional[QGraphicsSceneHoverEvent]):
+        if self.isSelected() and event:
+            direction = self._hit_test(event.pos())
+            self._update_cursor(direction)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().hoverMoveEvent(event)
+
+    def hoverLeaveEvent(self, event: Optional[QGraphicsSceneHoverEvent]):
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event: Optional[QGraphicsSceneMouseEvent]):
+        if not event:
+            super().mousePressEvent(event)
+            return
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.pos()
+            direction = self._hit_test(pos)
+
+            if direction != self.DIR_NONE:
+                self._state = self.STATE_RESIZE
+                self._resize_dir = direction
+                self._start_mouse_pos = event.scenePos()
+                self._start_rect = self.rect()
+                event.accept()
+            else:
+                self._state = self.STATE_MOVE
+                self.setCursor(Qt.CursorShape.SizeAllCursor)
+                super().mousePressEvent(event)
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: Optional[QGraphicsSceneMouseEvent]):
+        if not event:
+            super().mouseMoveEvent(event)
+            return
+        if self._state == self.STATE_RESIZE:
+            delta = event.scenePos() - self._start_mouse_pos
+            new_rect = QRectF(self._start_rect)
+            min_w, min_h = 100, 100
+
+            if self._resize_dir & self.DIR_LEFT:
+                new_rect.setLeft(min(new_rect.right() - min_w, new_rect.left() + delta.x()))
+            if self._resize_dir & self.DIR_RIGHT:
+                new_rect.setRight(max(new_rect.left() + min_w, new_rect.right() + delta.x()))
+            if self._resize_dir & self.DIR_TOP:
+                new_rect.setTop(min(new_rect.bottom() - min_h, new_rect.top() + delta.y()))
+            if self._resize_dir & self.DIR_BOTTOM:
+                new_rect.setBottom(max(new_rect.top() + min_h, new_rect.bottom() + delta.y()))
+
+            self.setRect(new_rect)
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: Optional[QGraphicsSceneMouseEvent]):
+        if not event:
+            super().mouseReleaseEvent(event)
+            return
+        self._state = self.STATE_IDLE
+        self._resize_dir = self.DIR_NONE
+        self._update_cursor(self._hit_test(event.pos()))
+        super().mouseReleaseEvent(event)
+
+    def _hit_test(self, pos: QPointF) -> int:
+        rect = self.rect()
+        x, y = pos.x(), pos.y()
+        result = self.DIR_NONE
+
+        on_left = abs(x - rect.left()) < self.HANDLE_SIZE
+        on_right = abs(x - rect.right()) < self.HANDLE_SIZE
+        on_top = abs(y - rect.top()) < self.HANDLE_SIZE
+        on_bottom = abs(y - rect.bottom()) < self.HANDLE_SIZE
+
+        if on_left:
+            result |= self.DIR_LEFT
+        if on_right:
+            result |= self.DIR_RIGHT
+        if on_top:
+            result |= self.DIR_TOP
+        if on_bottom:
+            result |= self.DIR_BOTTOM
+
+        return result
+
+    def _update_cursor(self, direction):
+        if direction == self.DIR_TOP_LEFT or direction == self.DIR_BOTTOM_RIGHT:
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif direction == self.DIR_TOP_RIGHT or direction == self.DIR_BOTTOM_LEFT:
+            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+        elif direction & self.DIR_LEFT or direction & self.DIR_RIGHT:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif direction & self.DIR_TOP or direction & self.DIR_BOTTOM:
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def paint(self, painter: Optional[QPainter], option=None, widget=None) -> None:
+        if not painter:
+            super().paint(painter, option, widget)
+            return
+
+        # 绘制裁剪框边框
+        pen_color = QColor(255, 0, 0, 255) if self.isSelected() else QColor(255, 100, 100, 180)
+        width = 3 if self.isSelected() else 2
+        painter.setPen(QPen(pen_color, width, Qt.PenStyle.DashLine))
+        painter.setBrush(self.brush())
+        painter.drawRect(self.rect())
+
+        # 绘制提示文字
+        if self.isSelected():
+            painter.setPen(QPen(QColor(255, 255, 255)))
+            font = QFont()
+            font.setPixelSize(16)
+            font.setBold(True)
+            painter.setFont(font)
+
+            rect = self.rect()
+            text = f"裁剪区域 ({int(rect.width())} x {int(rect.height())})"
+            text_rect = QRectF(rect.left(), rect.top() - 25, rect.width(), 20)
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, text)

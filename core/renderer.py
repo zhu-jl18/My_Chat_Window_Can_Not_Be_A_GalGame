@@ -187,6 +187,9 @@ class CharacterRenderer:
         canvas = self._get_base_canvas(portrait_key, bg_key).copy()
         draw = ImageDraw.Draw(canvas)
         self._draw_text(draw, text, speaker_name)
+
+        # 应用裁剪（如果启用）
+        canvas = self._apply_crop(canvas)
         return canvas
 
     def _get_base_canvas(self, portrait_key: str, bg_key: str) -> Image.Image:
@@ -263,6 +266,35 @@ class CharacterRenderer:
         if img.size == self.canvas_size:
             return img
         return img.resize(self.canvas_size, Image.Resampling.LANCZOS)
+
+    def _apply_crop(self, canvas: Image.Image) -> Image.Image:
+        """应用裁剪区域（如果启用）"""
+        layout = self.layout
+        enable_crop = layout.get("enable_crop", False)
+
+        if not enable_crop:
+            return canvas
+
+        crop_area = layout.get("crop_area")
+        if not crop_area or not isinstance(crop_area, (list, tuple)) or len(crop_area) != 4:
+            return canvas
+
+        x1, y1, x2, y2 = crop_area
+
+        # 确保裁剪区域在画布范围内
+        canvas_w, canvas_h = canvas.size
+        x1 = max(0, min(x1, canvas_w))
+        y1 = max(0, min(y1, canvas_h))
+        x2 = max(x1, min(x2, canvas_w))
+        y2 = max(y1, min(y2, canvas_h))
+
+        # 裁剪图片
+        if x2 > x1 and y2 > y1:
+            cropped = canvas.crop((x1, y1, x2, y2))
+            print(f"✂️ 已裁剪图片: ({x1}, {y1}) → ({x2}, {y2}), 输出尺寸: {cropped.size}")
+            return cropped
+
+        return canvas
 
     def _fit_dialog_box_to_canvas(self, box_img: Image.Image) -> Tuple[Image.Image, Tuple[int, int]]:
         """Resize dialog box to canvas width and bottom align."""
